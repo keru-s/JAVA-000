@@ -329,6 +329,35 @@ Transfer/sec:      2.38MB
 
 ### 总结
 
+1. GC 的进化史，就是一个不断细化的过程
+
+   - 串行 GC 到并行 GC，是从一个线程到多个线程的进化
+   - 并行 GC 到 CMS，是 GC 回收过程的细化。
+   - CMS 到 G1，是 GC 回收区域的细化。
+
+   通过对 GC 的细化，我们可以更为精准的把控 GC 的过程，从而让 GC 的时间更短，对系统的影响更小。这就类比于，我们把一个大事务，拆成多个小事务，一个大颗粒的线程锁控制，拆成多个小颗粒的线程锁控制一样。
+
+2. GC 的进化史，也是从够用到好用的进化史。
+
+   - 串行 GC 到并行 GC，是想办法提供 GC 速度，降低 STW 对业务影响的过程。
+   - 并行 GC -> CMS -> G1，则开始着力去解决吞吐量，响应时延这些更影响业务和用户体验方面的问题。
+
+#### 串行 GC
+
+串行 GC 适用于单核的 client 端机器上，因为减少了线程间的切换，所以在内存较小的时候，也能起到较好的回收效果。
+
+#### 并行 GC
+
+并行 GC 使用了多线程进行 GC，因此相较于串行 GC， 回收的速度更快，适用于多核的 server 端机器上，然而如果需要回收的内存区域较大，那么会造成比较长的 GC 时间。
+
+#### CMS
+
+cms 相较于并行 GC，将整个 GC 回收过程拆分成了好几步，在 GC 的大多数时间里，允许与业务代码并行执行，减少了 GC 对业务的影响，但是仍然避免不了大内存回收时，STW 对业务的影响。
+
+#### G1
+
+G1 相较于 CMS，不仅将 GC 的过程拆分的更细致了，而且将内存区域从较大的新生代、老年代，变成非常多的小块区域，这样就可以对较小的区域使用整理复制的方式进行 GC，因此可以控制最大 STW 的时间，让 GC 对业务的影响变得更小。
+
 
 
 # 作业-周六
@@ -340,4 +369,33 @@ Transfer/sec:      2.38MB
 写一段代码，使用 HttpClient 或 OkHttp 访问 [http://localhost:8801 ](http://localhost:8801/)。
 
 ### 解答
+
+```java
+import org.apache.http.HttpEntity;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
+
+import java.io.IOException;
+
+public class HttpClient {
+    public static void main(String[] args) {
+        try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+            HttpGet httpGet = new HttpGet("http://localhost:8801");
+            String result = httpClient.execute(httpGet, httpResponse -> {
+                int status = httpResponse.getStatusLine().getStatusCode();
+                if (status < 200 || status >= 300) {
+                    return "request error";
+                }
+                HttpEntity entity = httpResponse.getEntity();
+                return entity != null ? EntityUtils.toString(entity) : "";
+            });
+            System.out.println("result = " + result);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
 
