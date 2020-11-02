@@ -10,8 +10,8 @@ import java.io.IOException;
 
 public class HttpClient {
     public static void main(String[] args) {
+        HttpGet httpGet = new HttpGet("http://localhost:8808/test");
         try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
-            HttpGet httpGet = new HttpGet("http://localhost:8801");
             String result = httpClient.execute(httpGet, httpResponse -> {
                 int status = httpResponse.getStatusLine().getStatusCode();
                 if (status < 200 || status >= 300) {
