@@ -6,6 +6,8 @@
 
 答案：
 
+相关代码在 `BeanDemo` 中
+
 在 Spring 中最常见的 Bean 装配机制有三种，分别是：
 
 - 在 XML 上显式配置
@@ -366,3 +368,220 @@ public class CDPlayerTest {
 - 以及混合导入：
   - 比如在 JavaConfig 中引入 XML 配置，使用`@ImportResource`指定 XML 文件；
   - XML 中导入 JavaConfig，通过 `<bean>` 元素来实现。
+
+
+
+## 第四题-自动配置与Starter
+
+题目：给前面课程提供的 Student/Klass/School 实现自动配置和 Starter。
+
+答案：
+
+starter 位于 `student-starter` 项目中，`starter-user` 中引入了 `student-starter` ，并于单元测试中使用了 Starter 中的类。
+
+### 自动配置
+
+Spring 官方是这样[定义自动配置 Bean](https://docs.spring.io/spring-boot/docs/2.0.0.M3/reference/html/boot-features-developing-auto-configuration.html#boot-features-custom-starter)的：
+
+> auto-configuration is implemented with standard `@Configuration` classes. Additional `@Conditional` annotations are used to constrain when the auto-configuration should apply. Usually auto-configuration classes use `@ConditionalOnClass` and `@ConditionalOnMissingBean` annotations. This ensures that auto-configuration only applies when relevant classes are found and when you have not declared your own `@Configuration`.
+
+首先，我们创建一个配置属性的bean，用于接收 `application.properties` 中定义的属性
+
+```java
+@ConfigurationProperties(prefix = "insight.student")
+@Data
+public class StudentProperties {
+    private int id;
+    private String name;
+}
+```
+
+这样，我们就可以通过 
+
+```properties
+insight.student.id=1
+insight.student.name=insight
+```
+
+`insight.student` 前缀的配置来给属性Bean赋值。
+
+然后，我们创建一个配置类，用于装配各个类
+
+```JAVA
+@Configuration
+@EnableConfigurationProperties({StudentProperties.class})
+public class SchoolConfiguration {
+
+    @Bean
+    public Student student100(StudentProperties properties){
+        Student result = new Student();
+        result.setId(properties.getId());
+        result.setName(properties.getName());
+        return result;
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public Klass klass(Student student){
+        Klass result = new Klass();
+        result.setStudents(Collections.singletonList(student));
+        return result;
+    }
+
+    @Bean
+    @ConditionalOnClass({Klass.class,Student.class})
+    public ISchool school(){
+        return new School();
+    }
+}
+```
+
+接着，创建一个自动配置类，用于加载所有的配置类
+
+```JAVA
+@Configuration
+@Import(SchoolConfiguration.class)
+public class SchoolAutoConfiguration {
+}
+```
+
+最后，在 `resource` 目录下，创建 `META-INF` 文件夹，然后创建 `spring.factories` 文件，该文件中定义需要自动配置的类
+
+```properties
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+  com.ins.demo.domain.config.SchoolAutoConfiguration
+```
+
+### 定义 Starter
+
+根据 [Spring 官方的定义](https://docs.spring.io/spring-boot/docs/2.0.0.M3/reference/html/boot-features-developing-auto-configuration.html#boot-features-custom-starter)：
+
+> A full Spring Boot starter for a library may contain the following components:
+>
+> - The `autoconfigure` module that contains the auto-configuration code.
+> - The `starter` module that provides a dependency to the autoconfigure module as well as the library and any additional dependencies that are typically useful. In a nutshell, adding the starter should be enough to start using that library.
+
+因此，有了自动配置，我们只需要在 `pom.xml` 中定义好自动配置需要的模块，即可提供一个 Starter 。
+
+定义 `pom.xml` 中的依赖，这里我们引入 lombok
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.1.0.RELEASE</version>
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+    <groupId>com.ins</groupId>
+    <artifactId>student-demo-spring-boot-starter</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>student-demo</name>
+    <description>Demo starter project for Spring Boot</description>
+
+    <properties>
+        <java.version>1.8</java.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>
+
+```
+
+ 然后运行 `mvn install` 命令，将 starter打包到本地仓库。
+
+**需要注意的是：**在运行打包之前，需要将 `pom.xml` 中自带的 plugin 删除，否则打包出来的 jar 是一个胖jar，是一个可运行的项目而非一个 Starter。
+
+```
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+		</plugins>
+	</build>
+```
+
+然后在另一个项目引入 starter。
+
+```xml
+	<dependencies>
+		<dependency>
+			<groupId>com.ins</groupId>
+			<artifactId>student-demo-spring-boot-starter</artifactId>
+			<version>0.0.1-SNAPSHOT</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+```
+
+配置上属性
+
+```properties
+insight.student.id=1211
+insight.student.name=insight
+```
+
+即可运行单元测试，检测bean是否注入成功
+
+```java
+@RunWith(SpringRunner.class)
+@SpringBootTest
+public class StarterUserApplicationTests {
+
+	@Autowired
+	private Student student;
+
+	@Autowired
+	private Klass klass;
+
+	@Autowired
+	private ISchool school;
+
+	@Test
+	public void contextLoads() {
+		student.study();
+		klass.dong();
+		school.ding();
+	}
+}
+```
+
+
+
+## 第六题-JDBC 接口和数据库连接池
+
+题目：
+
+> 研究一下 JDBC 接口和数据库连接池，掌握它们的设计和用法：
+> 1）使用 JDBC 原生接口，实现数据库的增删改查操作。
+> 2）使用事务，PrepareStatement 方式，批处理方式，改进上述操作。
+> 3）配置 Hikari 连接池，改进上述操作。提交代码到 Github。
