@@ -619,3 +619,42 @@ public class StarterUserApplicationTests {
     }
 ```
 
+### 配置 Hikari 连接池
+
+由于 SpringBoot 2.0 之后，默认使用了 Hikari 做为数据库连接池，因此，只需在 `application.properties` 中增加配置项即可使用 Hikari
+
+```properties
+spring.datasource.url=jdbc:mysql://localhost:3306/test?useUnicode=true&characterEncoding=utf8&allowMultiQueries=true
+spring.datasource.username=test
+spring.datasource.password=test
+spring.datasource.hikari.connection-timeout=20000
+```
+
+使用单测检查连接情况
+
+```java
+@RunWith(SpringRunner.class)
+@SpringBootTest
+public class JdbcApplicationTests {
+
+	@Autowired
+	private JdbcTemplate jdbcTemplate;
+
+	@Test
+	public void contextLoads() {
+		final List<String> name_from_student = jdbcTemplate.queryForList("select name from student", String.class);
+		name_from_student.forEach(System.out::println);
+	}
+
+}
+```
+
+结果为：
+
+```bash
+2020-11-19 15:00:24.561  INFO 26340 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2020-11-19 15:00:24.730  INFO 26340 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+………………
+```
+
+`HikariPool-1 - Start completed.` 可以看到已成功使用 Hikari 连接池。
