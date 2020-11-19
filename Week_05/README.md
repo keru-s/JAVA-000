@@ -585,3 +585,37 @@ public class StarterUserApplicationTests {
 > 1）使用 JDBC 原生接口，实现数据库的增删改查操作。
 > 2）使用事务，PrepareStatement 方式，批处理方式，改进上述操作。
 > 3）配置 Hikari 连接池，改进上述操作。提交代码到 Github。
+
+答案
+
+在 `jdbc` 模块中
+
+### 使用JDBC原生接口实现CRUD
+
+在 `JdbcStatementCase` 类中
+
+### 使用事务
+
+使用事务的方式很简单，将自动提交改为手动提交即可。
+
+```java
+    /**
+     * 使用事务
+     */
+    private static void insertWithTransaction() {
+        String sql = "insert into student(name) value (?)";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            connection.setAutoCommit(false);
+            statement.setString(1, "张无忌");
+            statement.executeUpdate();
+            statement.setString(1, "赵敏");
+            //制造异常
+            int tmp=1/0;
+            statement.executeUpdate();
+            connection.commit();
+        } catch (SQLException throwables) {
+            throwables.printStackTrace();
+        }
+    }
+```
+
