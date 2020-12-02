@@ -4,6 +4,97 @@
 
 题目：按自己设计的表结构，插入 100 万订单模拟数据，测试不同方式的插入效率
 
+答案：
+
+### 存储过程
+
+#### 注意项
+
+在创建 MySQL 存储过程和函数的时候，最开始会报 `ERROR 1418 (HY000): Unknown error 1418`
+
+原因是 创建函数功能未开，通过 ` show variables like '%func%';`
+
+```bash
++---------------------------------+-------+
+| Variable_name                   | Value |
++---------------------------------+-------+
+| log_bin_trust_function_creators | OFF   |
++---------------------------------+-------+
+1 row in set, 1 warning (0.00 sec)
+```
+
+然后设置函数功能开启 ` set global log_bin_trust_function_creators =1` 即可。
+
+#### 随机数生成函数
+
+```mysql
+CREATE FUNCTION `rand_num`() RETURNS int(5)
+BEGIN
+	DECLARE i INT DEFAULT 0;
+	SET i=FLOOR(100+RAND()*10);
+	RETURN i;
+END
+```
+
+#### 随机插入订单的存储过程
+
+```mysql
+CREATE PROCEDURE `insertOrder`(IN START INT(10),IN max_num INT(10))
+BEGIN
+	 DECLARE i INT DEFAULT 0;
+	 DECLARE time TIMESTAMP DEFAULT NOW();
+	 DECLARE serial_prefix VARCHAR(20) DEFAULT '';
+	 set time = now();
+	 set serial_prefix = rand_num();
+	 START TRANSACTION;
+        REPEAT
+			set i = i+1;
+			INSERT INTO `order`(serial_num,state,user_id,good_id,create_tm,modify_tm) 
+			VALUES(CONCAT(serial_prefix,START,i),1,rand_num(),rand_num(),time,time);
+			UNTIL i = max_num 
+		END REPEAT;
+	 COMMIT;
+END
+```
+
+执行结果：
+
+插入 10 w 数据，4s
+
+```shell
+mysql> call insertOrder(1,100000);
+Query OK, 0 rows affected (4.18 sec)
+
+mysql> SELECT count(*) FROM `order`;
++----------+
+| count(*) |
++----------+
+|   100000 |
++----------+
+1 row in set (0.03 sec)
+```
+
+插入 1000w 数据，440s
+
+```
+mysql> call insertOrder(1,10000000);
+Query OK, 0 rows affected (7 min 20.82 sec)
+
+mysql> SELECT count(*) FROM `order`;
++----------+
+| count(*) |
++----------+
+| 10000000 |
++----------+
+1 row in set (3.10 sec)
+```
+
+### JDBC 插入
+
+
+
+
+
 
 
 ## 周六-第二题
@@ -12,7 +103,7 @@
 
 ### 答案
 
-代码在 `multiple-datasource-01` 项目中，本次使用 Spring Boot、Druid、spring JDBC template 来实现。
+代码在 `multiple-datasource-01` 项目中，本次使用 Spring Boot、Druid、spring JDBC template（[官方教程](https://spring.io/guides/gs/relational-data-access/)） 来实现。
 
 #### 配置多个数据源
 
