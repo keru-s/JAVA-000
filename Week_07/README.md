@@ -112,3 +112,94 @@ public class UserManagerImpl implements UserManager {
 
 题目：读写分离 - 数据库框架版本 2.0
 
+### 答案
+
+代码在 `multiple-datasource-02` 项目中，本次使用 Spring Boot、shardingsphere、spring jpa 来实现。
+
+#### 引入依赖
+
+```xml
+<dependency>
+	<groupId>org.apache.shardingsphere</groupId>
+	<artifactId>shardingsphere-jdbc-core-spring-boot-starter</artifactId>
+	<version>5.0.0-alpha</version>
+</dependency>
+```
+
+#### 配置数据源
+
+```yaml
+spring:
+  shardingsphere:
+    props:
+      # 显示具体sql查询情况     
+      sql-show: true
+    datasource:
+      names: master-ds,slave-ds
+      # 通用配置
+      common:
+        type: com.zaxxer.hikari.HikariDataSource
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        username: root
+        password:
+      # 主库数据源    
+      master-ds:
+        jdbc-url: jdbc:mysql://localhost:3306/db?characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+      # 从库数据源    
+      slave-ds:
+        jdbc-url: jdbc:mysql://localhost:3316/db?characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+    rules:
+      # 读写分离配置
+      replica-query:
+        dataSources:
+          # 逻辑数据源
+          pr_ds:
+            # 指定主库
+            primary-data-source-name: master-ds
+            # 指定从库
+            replica-data-source-names: slave-ds
+            # 负载均衡策略，名字为自定义，若不填，在 Spring 2.x 下会报空指针异常
+            load-balancer-name: round-robin
+        load-balancers:
+          # 负载均衡策略名
+          round-robin:
+            # 轮询策略
+            type: ROUND_ROBIN
+            # 无需设置，但为避免空指针异常，进行了任意设置
+            props:
+              workid: 123
+```
+
+#### 封装DAO层
+
+配置好数据源后，直接正常使用 `jdbcTemplate` 即可。
+
+```JAVA
+@Repository
+public class UserManagerImpl implements UserManager {
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Override
+    public List<User> listUser() {
+        return jdbcTemplate.query("select * from t1", new BeanPropertyRowMapper<>(User.class));
+    }
+
+    @Override
+    public int insert(int id) {
+        return jdbcTemplate.update("insert into t1 value (?)", id);
+    }
+}
+```
+
+#### 执行结果
+
+![image-20201202150627850](images/image-20201202150627850.png)
+
+**读取数据**：通过红框可知，读取数据是通过从库的数据源获取的
+
+![image-20201202150814493](images/image-20201202150814493.png)
+
+**写入数据**：写入数据是写入了主库的数据源。
+
