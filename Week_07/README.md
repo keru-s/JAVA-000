@@ -91,9 +91,57 @@ mysql> SELECT count(*) FROM `order`;
 
 ### JDBC 插入
 
+#### 数据库配置
 
+```yaml
+spring:
+  datasource:
+    type: com.zaxxer.hikari.HikariDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/db?characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true
+    username: root
+    password:
+```
 
+**注意**：这里要配置 `rewriteBatchedStatements=true` 来开启高性能的批处理。
 
+> MySQL的JDBC连接的url中要加rewriteBatchedStatements参数，并保证5.1.13以上版本的驱动，才能实现高性能的批量插入。
+>  MySQL JDBC驱动在默认情况下会无视executeBatch()语句，把我们期望批量执行的一组sql语句拆散，一条一条地发给MySQL数据库，批量插入实际上是单条插入，直接造成较低的性能。
+>  只有把rewriteBatchedStatements参数置为true, 驱动才会帮你批量执行SQL
+>  另外这个选项对INSERT/UPDATE/DELETE都有效
+
+#### 测试case
+
+```java
+@Test
+public void testBatchInsert() {
+     String sql = "INSERT INTO `order`(serial_num,state,user_id,good_id,create_tm,modify_tm) VALUES (?,1,?,?,?,?)";
+     final Date now = new Date(1606922265000L);
+     final int prefix = new Random().nextInt(10000000);
+     final List<Integer> limit = IntStream.rangeClosed(1,1000000).boxed().collect(Collectors.toList());
+
+     final long startTime = System.currentTimeMillis();
+     jdbcTemplate.batchUpdate(sql, limit, 2500, 
+                              new ParameterizedPreparedStatementSetter<Integer>() {
+            @Override
+            public void setValues(PreparedStatement ps, Integer index) throws SQLException {
+                ps.setInt(1, prefix+index);
+                ps.setInt(2, new Random().nextInt(10000));
+                ps.setInt(3, new Random().nextInt(10000));
+                ps.setDate(4, now);
+                ps.setDate(5, now);
+            }
+        });
+        final long endTime = System.currentTimeMillis();
+        System.out.println("耗时：" + (endTime - startTime));
+    }
+```
+
+批量插入1千万数据：
+
+- 每次插入2500条，耗时：117347 毫秒，约为 118s。
+- 每次插入3000条，耗时：114260 毫秒，约为 115s。
+- 每次插入5000条，耗时：120557 毫秒，约为 121s。
 
 
 
