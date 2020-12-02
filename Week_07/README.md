@@ -91,6 +91,8 @@ mysql> SELECT count(*) FROM `order`;
 
 ### JDBC 插入
 
+代码在 `batch-insert` 项目中
+
 #### 数据库配置
 
 ```yaml
