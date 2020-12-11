@@ -1,0 +1,58 @@
+spring:
+  shardingsphere:
+    props:
+      # 显示具体sql查询情况
+      sql-show: true
+    datasource:
+      names: ds0,ds1
+      # 通用配置
+      common:
+        type: com.zaxxer.hikari.HikariDataSource
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        username: root
+        password:
+      ds0:
+        jdbc-url: jdbc:mysql://localhost:3306/test?characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+      ds1:
+        jdbc-url: jdbc:mysql://localhost:3316/test?characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+    rules:
+      sharding:
+        default-database-strategy:
+          standard:
+            sharding-column: id
+            sharding-algorithm-name: database-inline
+        tables:
+          t_order:
+            # 主键算法
+            key-generate-strategy:
+              column: id
+              key-generator-name: snowflake
+            # 配置表规则
+            actual-data-nodes: ds$->{0..1}.t_order_$->{0..16}
+            # 分库策略
+            database-strategy:
+              standard:
+                sharding-column: user_id
+                sharding-algorithm-name: database-inline
+            # 分表策略
+            table-strategy:
+              standard:
+                sharding-column: id
+                sharding-algorithm-name: table-inline
+        # 分片算法配置
+        sharding-algorithms:
+          database-inline:
+            type: INLINE
+            props:
+              algorithm-expression: ds$->{user_id % 2}
+          table-inline:
+            type: INLINE
+            props:
+              algorithm-expression: t_order_$->{id % 16}
+        # 键自增算法配置
+        key-generators:
+          snowflake:
+            type: SNOWFLAKE
+            props:
+              worker-id: 123
+              max-vibration-offset: 15

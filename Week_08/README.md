@@ -4,6 +4,152 @@
 
 设计对前面的订单表数据进行水平分库分表，拆分 2 个库，每个库 16 张表。并在新结构在演示常见的增删改查操作。代码、sql 和配置文件。
 
+### SQL
+
+```sql
+create DATABASE test;
+CREATE TABLE `test`.`t_order_0` (
+                         `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT COMMENT '自增id',
+                         `serial_num` bigint(20) unsigned NOT NULL COMMENT '流水号',
+                         `state` int(5) DEFAULT NULL COMMENT '状态',
+                         `user_id` bigint(20) DEFAULT NULL COMMENT '用户id',
+                         `good_id` bigint(20) DEFAULT NULL COMMENT '商品id',
+                         `total_price` decimal(10,2) DEFAULT NULL COMMENT '总价',
+                         `address` varchar(500) DEFAULT NULL COMMENT '收货地址',
+                         `create_tm` datetime DEFAULT NULL COMMENT '创建时间',
+                         `modify_tm` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                         PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单';
+
+create table `test`.`t_order_1` like `test`.`t_order_0`;
+create table `test`.`t_order_2` like `test`.`t_order_0`;
+create table `test`.`t_order_3` like `test`.`t_order_0`;
+create table `test`.`t_order_4` like `test`.`t_order_0`;
+create table `test`.`t_order_5` like `test`.`t_order_0`;
+create table `test`.`t_order_6` like `test`.`t_order_0`;
+create table `test`.`t_order_7` like `test`.`t_order_0`;
+create table `test`.`t_order_8` like `test`.`t_order_0`;
+create table `test`.`t_order_9` like `test`.`t_order_0`;
+create table `test`.`t_order_10` like `test`.`t_order_0`;
+create table `test`.`t_order_11` like `test`.`t_order_0`;
+create table `test`.`t_order_12` like `test`.`t_order_0`;
+create table `test`.`t_order_13` like `test`.`t_order_0`;
+create table `test`.`t_order_14` like `test`.`t_order_0`;
+create table `test`.`t_order_15` like `test`.`t_order_0`;
+```
+
+### 配置文件
+
+```yaml
+spring:
+  shardingsphere:
+    props:
+      # 显示具体sql查询情况
+      sql-show: true
+    datasource:
+      names: ds0,ds1
+      # 通用配置
+      common:
+        type: com.zaxxer.hikari.HikariDataSource
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        username: root
+        password:
+      ds0:
+        jdbc-url: jdbc:mysql://localhost:3306/test?characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+      ds1:
+        jdbc-url: jdbc:mysql://localhost:3316/test?characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+    rules:
+      sharding:
+        default-database-strategy:
+          standard:
+            sharding-column: id
+            sharding-algorithm-name: database-inline
+        tables:
+          t_order:
+            # 主键算法
+            key-generate-strategy:
+              column: id
+              key-generator-name: snowflake
+            # 配置表规则
+            actual-data-nodes: ds$->{0..1}.t_order_$->{0..16}
+            # 分库策略
+            database-strategy:
+              standard:
+                sharding-column: user_id
+                sharding-algorithm-name: database-inline
+            # 分表策略
+            table-strategy:
+              standard:
+                sharding-column: id
+                sharding-algorithm-name: table-inline
+        # 分片算法配置
+        sharding-algorithms:
+          database-inline:
+            type: INLINE
+            props:
+              algorithm-expression: ds$->{user_id % 2}
+          table-inline:
+            type: INLINE
+            props:
+              algorithm-expression: t_order_$->{id % 16}
+        # 键自增算法配置
+        key-generators:
+          snowflake:
+            type: SNOWFLAKE
+            props:
+              worker-id: 123
+              max-vibration-offset: 15
+```
+
+### 代码
+
+```java
+    @Test
+    public void testSave() {
+        Random random = new Random();
+        final Date date = new Date();
+
+        for (int i = 0; i < 10_00; i++) {
+            final Order order = new Order();
+            order.setState(1);
+            order.setCreateTm(date);
+            order.setUserId((long) (Math.random() * 1024));
+            order.setSerialNum(123L+random.nextInt(1000000));
+            orderRepository.save(order);
+        }
+
+    }
+```
+
+查看插入结果：
+
+ ` select table_name,table_rows from information_schema.tables where TABLE_SCHEMA = 'test';`
+
+```bash
++------------+------------+
+| table_name | table_rows |
++------------+------------+
+| t_order_0  |         32 |
+| t_order_1  |         31 |
+| t_order_10 |         25 |
+| t_order_11 |         37 |
+| t_order_12 |         28 |
+| t_order_13 |         27 |
+| t_order_14 |         29 |
+| t_order_15 |         32 |
+| t_order_2  |         28 |
+| t_order_3  |         30 |
+| t_order_4  |         31 |
+| t_order_5  |         24 |
+| t_order_6  |         32 |
+| t_order_7  |         36 |
+| t_order_8  |         33 |
+| t_order_9  |         26 |
++------------+------------+
+```
+
+可以看到，通过该配置，数据能均匀的落在不同的分片上。
+
 
 
 ## 周六-第一题
