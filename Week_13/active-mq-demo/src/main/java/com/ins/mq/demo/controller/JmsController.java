@@ -2,22 +2,31 @@ package com.ins.mq.demo.controller;
 
 import com.ins.mq.demo.domain.Email;
 import com.ins.mq.demo.domain.JmsResponse;
-import com.ins.mq.demo.message.JmsProducer;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Controller;
+import com.ins.mq.demo.message.producer.JmsProducer;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import javax.annotation.Resource;
 
 @RestController
 public class JmsController {
 
-    @Autowired
-    private JmsProducer jmsProducer;
+    @Resource(name = "queueProducer")
+    private JmsProducer queueProducer;
+
+    @Resource(name = "topicProducer")
+    private JmsProducer topicProducer;
+
 
     @PostMapping("/sendEmail")
     public JmsResponse sendEmail(Email email) {
-        jmsProducer.sendEmail(email);
+        queueProducer.sendEmail(email);
+        return JmsResponse.success();
+    }
+
+    @PostMapping("/sendEmailToTopic")
+    public JmsResponse sendEmailToTopic(Email email) {
+        topicProducer.sendEmail(email);
         return JmsResponse.success();
     }
 }

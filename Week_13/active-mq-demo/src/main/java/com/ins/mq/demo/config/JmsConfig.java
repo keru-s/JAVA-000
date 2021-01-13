@@ -5,6 +5,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
+import org.springframework.jms.config.DefaultJmsListenerContainerFactory;
+import org.springframework.jms.config.JmsListenerContainerFactory;
 import org.springframework.jms.core.JmsTemplate;
 import org.springframework.jms.support.converter.MappingJackson2MessageConverter;
 import org.springframework.jms.support.converter.MessageConverter;
@@ -27,6 +29,23 @@ public class JmsConfig {
         return connectionFactory;
     }
 
+    @Bean
+    public JmsListenerContainerFactory<?> jmsTopicListenerContainer() {
+        DefaultJmsListenerContainerFactory bean = new DefaultJmsListenerContainerFactory();
+        bean.setPubSubDomain(true);
+        bean.setConnectionFactory(connectionFactory());
+        bean.setMessageConverter(jacksonJmsMessageConverter());
+        return bean;
+    }
+
+    @Bean
+    public JmsListenerContainerFactory<?> jmsQueueListenerContainer() {
+        DefaultJmsListenerContainerFactory bean = new DefaultJmsListenerContainerFactory();
+        bean.setConnectionFactory(connectionFactory());
+        bean.setMessageConverter(jacksonJmsMessageConverter());
+        return bean;
+    }
+
 
     @Bean
     public MessageConverter jacksonJmsMessageConverter(){
@@ -39,9 +58,17 @@ public class JmsConfig {
     }
 
     @Bean
-    public JmsTemplate jmsTemplate() {
+    public JmsTemplate jmsQueueTemplate() {
         JmsTemplate jmsTemplate = new JmsTemplate(connectionFactory());
         jmsTemplate.setMessageConverter(jacksonJmsMessageConverter());
+        return jmsTemplate;
+    }
+
+    @Bean
+    public JmsTemplate jmsTopicTemplate() {
+        JmsTemplate jmsTemplate = new JmsTemplate(connectionFactory());
+        jmsTemplate.setMessageConverter(jacksonJmsMessageConverter());
+        jmsTemplate.setPubSubDomain(true);
         return jmsTemplate;
     }
 }

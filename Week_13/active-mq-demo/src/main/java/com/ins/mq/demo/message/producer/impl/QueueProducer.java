@@ -1,14 +1,17 @@
-package com.ins.mq.demo.message;
+package com.ins.mq.demo.message.producer.impl;
 
 import com.ins.mq.demo.domain.Email;
+import com.ins.mq.demo.message.producer.JmsProducer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jms.core.JmsTemplate;
 import org.springframework.stereotype.Service;
 
-@Service
-public class JmsProducer {
+import javax.annotation.Resource;
 
-    @Autowired
+@Service("queueProducer")
+public class QueueProducer implements JmsProducer {
+
+    @Resource(name = "jmsQueueTemplate")
     private JmsTemplate jmsTemplate;
 
     public void sendEmail(Email email) {

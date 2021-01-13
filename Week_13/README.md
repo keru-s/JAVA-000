@@ -6,7 +6,7 @@
 
 
 
-## queue的生产和消费
+## Queue的生产和消费
 
 ### 依赖和配置
 
@@ -48,38 +48,7 @@ public class Email {
 }
 ```
 
-### 消费者的实现
-
-接着，实现一个消费者
-
-```java
-@Component
-public class JmsReceiver {
-
-    @JmsListener(destination = "mailbox")
-    public void receiverMessage(Email email){
-        System.out.println("Received <" + email + ">");
-    }
-}
-```
-
-通过 `@JmsListener` 来指定该方法对某一个 queue 中的内容进行消费。这里，我们指定这个方法消费 `mailbox` 队列。
-
-然后在启动类上增加注解：`@EnableJms`，使得  `@JmsListener`  能够生效。
-
-```JAVA
-@SpringBootApplication
-@EnableJms
-public class ActiveMqDemoApplication {
-
-    public static void main(String[] args) {
-        SpringApplication.run(ActiveMqDemoApplication.class, args);
-    }
-
-}
-```
-
-### 生产者实现
+### MQ 配置
 
 首先对`JmsTemplate`进行配置
 
@@ -110,8 +79,8 @@ public class JmsConfig {
         return converter;
     }
 
-    @Bean
-    public JmsTemplate jmsTemplate() {
+ 	@Bean
+    public JmsTemplate jmsQueueTemplate() {
         JmsTemplate jmsTemplate = new JmsTemplate(connectionFactory());
         jmsTemplate.setMessageConverter(jacksonJmsMessageConverter());
         return jmsTemplate;
@@ -127,13 +96,54 @@ public class JmsConfig {
   - `TypeIdPropertyName`：设置保存类属性的属性名，这个值必须设置，否则会出现无法将消息转换成 POJO 的情况。
 - `JmsTemplate`：将定义好的 `ConnectionFactory`，`MessageConverter`设置到 `jmsTemplate` 中
 
+### 消费者的实现
+
+接着，实现一个消费者
+
+```java
+@Component
+public class JmsQueueReceiver {
+
+    @JmsListener(destination = "mailbox")
+    public void receiverMessage(Email email) {
+        System.out.println("Received <" + email + ">");
+    }
+}
+```
+
+通过 `@JmsListener` 来指定该方法对某一个 queue 中的内容进行消费。这里，我们指定这个方法消费 `mailbox` 队列。
+
+然后在启动类上增加注解：`@EnableJms`，使得  `@JmsListener`  能够生效。
+
+```JAVA
+@SpringBootApplication
+@EnableJms
+public class ActiveMqDemoApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(ActiveMqDemoApplication.class, args);
+    }
+
+}
+```
+
+### 生产者实现
+
 然后定义一个生产者
 
 ```JAVA
-@Service
-public class JmsProducer {
+public interface JmsProducer {
 
-    @Autowired
+    void sendEmail(Email email);
+
+}
+```
+
+```JAVA
+@Service("queueProducer")
+public class QueueProducer implements JmsProducer {
+
+    @Resource(name = "jmsQueueTemplate")
     private JmsTemplate jmsTemplate;
 
     public void sendEmail(Email email) {
@@ -179,6 +189,161 @@ POST http://localhost:8080/sendEmail
 ```
 Sending an email message.
 Received <Email{to=insight@gmail.com, body=hello,world!}>
+```
+
+
+
+## Topic的生产和消费
+
+### 定义 Topic
+
+```JAVA
+import org.apache.activemq.command.ActiveMQTopic;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import javax.jms.Topic;
+@Configuration
+public class JmsTopic {
+    @Bean
+    public Topic mailbox() {
+        return new ActiveMQTopic("topic.mailbox");
+    }
+}
+```
+
+### MQ 配置
+
+```JAVA
+@Configuration
+public class JmsConfig {
+
+    @Autowired
+    private Environment env;
+
+    @Bean
+    public ConnectionFactory connectionFactory() {
+        ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory();
+        connectionFactory.setBrokerURL(env.getProperty("spring.activemq.broker-url"));
+        connectionFactory.setUserName(env.getProperty("spring.activemq.user"));
+        connectionFactory.setPassword(env.getProperty("spring.activemq.password"));
+        return connectionFactory;
+    }
+
+    @Bean
+    public MessageConverter jacksonJmsMessageConverter(){
+        MappingJackson2MessageConverter converter = new MappingJackson2MessageConverter();
+        converter.setTargetType(MessageType.TEXT);
+        /* Specify the name of the JMS message property that carries the type id for the contained object: either a mapped id value or a raw Java class name.
+        Default is none. NOTE: This property needs to be set in order to allow for converting from an incoming message to a Java object.*/
+        converter.setTypeIdPropertyName("_type");
+        return converter;
+    }
+    
+    
+    @Bean
+    public JmsListenerContainerFactory<?> jmsTopicListenerContainer() {
+        DefaultJmsListenerContainerFactory bean = new DefaultJmsListenerContainerFactory();
+        bean.setPubSubDomain(true);
+        bean.setConnectionFactory(connectionFactory());
+        bean.setMessageConverter(jacksonJmsMessageConverter());
+        return bean;
+    }
+
+    @Bean
+    public JmsTemplate jmsTopicTemplate() {
+        JmsTemplate jmsTemplate = new JmsTemplate(connectionFactory());
+        jmsTemplate.setMessageConverter(jacksonJmsMessageConverter());
+        jmsTemplate.setPubSubDomain(true);
+        return jmsTemplate;
+    }
+}
+```
+
+这里定义了 `JmsListenerContainerFactory`，通过 ` bean.setPubSubDomain(true);` 将消费改成主题模式。
+
+### 定义生产者
+
+```JAVA
+@Service("topicProducer")
+public class TopicProducer implements JmsProducer {
+
+    @Resource(name = "jmsTopicTemplate")
+    private JmsTemplate jmsTemplate;
+
+    @Autowired
+    private Topic topic;
+
+    @Override
+    public void sendEmail(Email email) {
+        System.out.println("Sending an email message to topic.");
+        jmsTemplate.convertAndSend(topic,email);
+    }
+}
+```
+
+这里使用 `Topic`来指定发送的 destination，使消息能发送到 Topic 中。
+
+### 定义消费者
+
+```JAVA
+@Component
+public class JmsTopicReceiver {
+
+    @JmsListener(destination = "topic.mailbox", containerFactory = "jmsTopicListenerContainer")
+    public void receiverMessage1(Email email) {
+        System.out.println("Consumer-1 received <" + email + ">");
+    }
+
+    @JmsListener(destination = "topic.mailbox", containerFactory = "jmsTopicListenerContainer")
+    public void receiverMessage2(Email email) {
+        System.out.println("Consumer-2 received <" + email + ">");
+    }
+
+    @JmsListener(destination = "topic.mailbox", containerFactory = "jmsTopicListenerContainer")
+    public void receiverMessage3(Email email) {
+        System.out.println("Consumer-3 received <" + email + ">");
+    }
+}
+```
+
+- 定义了三个消费者，模拟多个节点消费一个信息的情况
+- `containerFactory`：指定了 `containerFactory` 是配置了 `setPubSubDomain(true)` 的Bean。
+
+### 整合
+
+```JAVA
+@RestController
+public class JmsController {
+
+    @Resource(name = "topicProducer")
+    private JmsProducer topicProducer;
+
+    @PostMapping("/sendEmailToTopic")
+    public JmsResponse sendEmailToTopic(Email email) {
+        topicProducer.sendEmail(email);
+        return JmsResponse.success();
+    }
+}
+```
+
+调用：
+
+```
+POST http://localhost:8080/sendEmailToTopic
+{
+  "to": "ins@gmail.com",
+  "body": "hello,world"
+}
+```
+
+可以看到打印出相关信息：
+
+```
+Sending an email message to topic.
+Consumer-2 received <Email{to=ins@gmail.com, body=hello,world}>
+Consumer-3 received <Email{to=ins@gmail.com, body=hello,world}>
+Consumer-1 received <Email{to=ins@gmail.com, body=hello,world}>
 ```
 
 
